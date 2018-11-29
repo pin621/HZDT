@@ -1,169 +1,345 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
+using System.Data.SqlClient;
 using System.Text;
 
 namespace HZDT.Infrastructure.DataAccess.SqlDBHelper
 {
     /// <summary>
-    /// SqlServer数据库帮助类
+    /// 封装数据库的基本操作
     /// </summary>
-    public class SQLHelper : IDBHelper
+    /// <remarks>    
+    public class SQLHelper
     {
-        private string connectionStringKey = "DefaultConnection";
+        #region 私有方法和工具
 
-        public SQLHelper() { }
-        public SQLHelper(string connectionStringKey)
+        private static void PrepareCommand(SqlCommand command, SqlConnection connection, SqlTransaction transaction, CommandType commandType, string commandText, out bool mustCloseConnection, List<IDataParameter> commandParameters, int? commandTimeout = null)
         {
-            if (!string.IsNullOrEmpty(connectionStringKey))
+            // If the provided connection is not open, we will open it
+            if (connection.State != ConnectionState.Open)
             {
-                this.connectionStringKey = connectionStringKey;
+                mustCloseConnection = true;
+                connection.Open();
+            }
+            else
+            {
+                mustCloseConnection = false;
+            }
+            // Associate the connection with the command
+            command.Connection = connection;
+
+            // Set the command text (stored procedure name or SQL statement)
+            command.CommandText = commandText;
+
+            // If we were provided a transaction, assign it
+            if (transaction != null)
+            {
+                command.Transaction = transaction;
+            }
+            if (commandTimeout != null)
+            {
+                command.CommandTimeout = Convert.ToInt32(commandTimeout);
+            }
+            // Set the command type
+            command.CommandType = commandType;
+            // Attach the command parameters if they are provided
+            if (commandParameters != null)
+            {
+                AttachParameters(command, commandParameters);
+            }
+            return;
+        }
+
+
+
+        //通用
+        private static void AttachParameters(SqlCommand command, List<IDataParameter> commandParameters)
+        {
+
+            if (commandParameters != null && commandParameters.Count > 0)
+            {
+                foreach (SqlParameter p in commandParameters)
+                {
+                    if (p != null)
+                    {
+                        // Check for derived output value with no value assigned
+                        if ((p.Direction == ParameterDirection.InputOutput ||
+                            p.Direction == ParameterDirection.Input) &&
+                            (p.Value == null))
+                        {
+                            p.Value = DBNull.Value;
+                        }
+                        command.Parameters.Add(p);
+                    }
+                }
             }
         }
 
-        public IDbTransaction BeginTractionand(IsolationLevel Iso = IsolationLevel.Unspecified)
+        #endregion
+
+        #region transaction 事务处理
+        /// <summary>
+        /// 开始事务
+        /// </summary>
+        /// <param name="conn">数据库连接</param>
+        /// <param name="Iso">指定连接的事务锁定行为</param>
+        /// <returns>当前事务</returns>  
+        public static IDbTransaction BeginTransaction(SqlConnection conn, IsolationLevel Iso)
         {
-            throw new NotImplementedException();
+            conn.Open();
+            return conn.BeginTransaction(Iso);
         }
 
-        public IDbTransaction BeginTractionand(string connKey, IsolationLevel Iso = IsolationLevel.Unspecified)
+        /// <summary>
+        /// 开始事务
+        /// </summary>
+        /// <param name="conn">数据库连接</param>
+        /// <returns>当前事务</returns>
+        public static IDbTransaction BeginTransaction(SqlConnection conn)
         {
-            throw new NotImplementedException();
+            conn.Open();
+            return conn.BeginTransaction();
         }
 
-        public void CommitTractionand(IDbTransaction dbTransaction)
+        /// <summary>
+        /// 结束事务，确认操作
+        /// </summary>
+        /// <param name="Transaction">要结束的事务</param>
+        public static void endTransactionCommit(IDbTransaction Transaction)
         {
-            throw new NotImplementedException();
+            using (DbConnection con = (DbConnection)Transaction.Connection)
+            {
+                Transaction.Commit();
+            }
         }
 
-        public DataSet ExecuteDataSet(string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
+        /// <summary>
+        /// 结束事务，回滚操作
+        /// </summary>
+        /// <param name="Transaction">要结束的事务</param>
+        public static void endTransactionRollback(IDbTransaction Transaction)
         {
-            throw new NotImplementedException();
+            using (DbConnection con = (DbConnection)Transaction.Connection)
+            {
+                Transaction.Rollback();
+            }
         }
 
-        public DataSet ExecuteDataSet(string connKey, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
+        #endregion
+
+        #region ExecuteNonQuery
+
+
+        /// <summary>
+        /// 执行ＳＱＬ语句或者存储过程 ,不返回参数,只返回影响行数
+        /// </summary>
+        /// <param name="connection">要执行ＳＱＬ语句的连接</param>
+        /// <param name="commandText">ＳＱＬ语句或者存储过程名</param>
+        /// <param name="commandParameters">ＳＱＬ语句或者存储过程参数</param>
+        /// <param name="commandType">ＳＱＬ语句类型</param>
+        /// <param name="commandTimeout">超时时间</param>
+        /// <returns>影响的行数</returns>
+        public static int ExecuteNonQuery(SqlConnection connection, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
         {
-            throw new NotImplementedException();
+            int retval = 0;
+            //要检查参数
+            SqlCommand cmd = new SqlCommand();
+            bool mustCloseConnection = false;
+            PrepareCommand(cmd, connection, (SqlTransaction)null, commandType, commandText, out mustCloseConnection, commandParameters, commandTimeout);
+            retval = cmd.ExecuteNonQuery();
+            cmd.Parameters.Clear();
+            if (mustCloseConnection)
+                connection.Close();
+            return retval;
         }
 
-        public DataSet ExecuteDataSet(IDbConnection conn, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
+
+        /// <summary>
+        ///  执行ＳＱＬ语句或者存储过程 ,不返回参数,只返回影响行数(通用)
+        /// </summary>
+        /// <param name="transaction">语句所在的事务</param>
+        /// <param name="commandType">ＳＱＬ语句类型</param>
+        /// <param name="commandText">ＳＱＬ语句或者存储过程名</param>
+        /// <param name="commandParameters">ＳＱＬ语句或者存储过程参数</param>
+        /// <returns>影响的行数</returns>
+        public static int ExecuteNonQuery(IDbTransaction transaction, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
         {
-            throw new NotImplementedException();
+            //要检查参数  
+            SqlCommand cmd = new SqlCommand();
+            bool mustCloseConnection = false;
+            PrepareCommand(cmd, ((SqlTransaction)transaction).Connection, (SqlTransaction)transaction, commandType, commandText, out mustCloseConnection, commandParameters, commandTimeout);
+            int retval = cmd.ExecuteNonQuery();
+            cmd.Parameters.Clear();
+            return retval;
+        }
+        #endregion
+
+        #region ExecuteDataset
+
+        /// <summary>
+        /// 执行ＳＱＬ语句或者存储过程 ,返回参数dataset
+        /// </summary>
+        /// <param name="connection">要执行ＳＱＬ语句的连接</param>
+        /// <param name="commandText">ＳＱＬ语句或者存储过程名</param>
+        /// <param name="commandParameters">ＳＱＬ语句或者存储过程参数</param>
+        /// <param name="commandType">ＳＱＬ语句类型</param>
+        /// <param name="commandTimeout">超时时间</param>
+        /// <returns>执行结果集</returns>
+        public static DataSet ExecuteDataset(SqlConnection connection, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
+        {
+            SqlCommand cmd = new SqlCommand();
+            bool mustCloseConnection = false;
+            PrepareCommand(cmd, connection, (SqlTransaction)null, commandType, commandText, out mustCloseConnection, commandParameters, commandTimeout);
+            using (SqlDataAdapter da = new SqlDataAdapter(cmd))
+            {
+                DataSet ds = new DataSet();
+                da.Fill(ds);
+                cmd.Parameters.Clear();
+                if (mustCloseConnection)
+                    connection.Close();
+                return ds;
+            }
         }
 
-        public DataSet ExecuteDataSet(IDbTransaction trans, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
+        /// <summary>
+        /// 执行ＳＱＬ语句或者存储过程 ,返回参数dataset
+        /// </summary>
+        /// <param name="transaction">语句所在的事务</param>
+        /// <param name="commandText">ＳＱＬ语句或者存储过程名</param>
+        /// <param name="commandParameters">ＳＱＬ语句或者存储过程参数</param>
+        /// <param name="commandType">ＳＱＬ语句类型</param>
+        /// <param name="commandTimeout">超时时间</param>
+        /// <returns>执行结果集</returns>
+        public static DataSet ExecuteDataset(IDbTransaction transaction, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
         {
-            throw new NotImplementedException();
+            SqlCommand cmd = new SqlCommand();
+            bool mustCloseConnection = false;
+            PrepareCommand(cmd, (SqlConnection)transaction.Connection, (SqlTransaction)transaction, commandType, commandText, out mustCloseConnection, commandParameters, commandTimeout);
+            using (SqlDataAdapter da = new SqlDataAdapter(cmd))
+            {
+                DataSet ds = new DataSet();
+                da.Fill(ds);
+                cmd.Parameters.Clear();
+                return ds;
+            }
+        }
+        #endregion
+
+        #region ExecuteReader
+
+        //通用
+        private static SqlDataReader ExecuteReader(SqlConnection connection, SqlTransaction transaction, CommandType commandType, string commandText, bool isClose, List<IDataParameter> commandParameters = null, int? commandTimeout = null)
+        {
+            bool mustCloseConnection = false;
+            SqlCommand cmd = new SqlCommand();
+            PrepareCommand(cmd, connection, transaction, commandType, commandText, out mustCloseConnection, commandParameters, commandTimeout);
+            SqlDataReader dataReader = null;
+            if (isClose)
+            {
+                dataReader = cmd.ExecuteReader(CommandBehavior.CloseConnection);
+            }
+            else
+            {
+                dataReader = cmd.ExecuteReader();
+            }
+            bool canClear = true;
+            foreach (IDataParameter commandParameter in cmd.Parameters)
+            {
+                if (commandParameter.Direction != ParameterDirection.Input)
+                    canClear = false;
+            }
+            if (canClear)
+            {
+                cmd.Parameters.Clear();
+            }
+            return dataReader;
         }
 
-        public IEnumerable<T> ExecuteIEnumerable<T>(string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null) where T : class, new()
+
+        /// <summary>
+        /// 执行ＳＱＬ语句或者存储过程 ,返回参数datareader(通用)
+        /// <remarks >
+        /// 需要显示关闭连接
+        /// </remarks>
+        /// </summary>
+        /// <param name="connection">要执行ＳＱＬ语句的连接</param>
+        /// <param name="commandType">ＳＱＬ语句类型</param>
+        /// <param name="commandText">ＳＱＬ语句或者存储过程名</param>
+        /// <param name="commandParameters">ＳＱＬ语句或者存储过程参数</param>
+        /// <returns>DataReader</returns>
+        public static SqlDataReader ExecuteReader(SqlConnection connection, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
         {
-            throw new NotImplementedException();
+            bool mustCloseConnection = true;
+            return ExecuteReader(connection, (SqlTransaction)null, commandType, commandText, mustCloseConnection, commandParameters, commandTimeout);
         }
 
-        public IEnumerable<T> ExecuteIEnumerable<T>(string connKey, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null) where T : class, new()
+
+        /// <summary>
+        /// 执行ＳＱＬ语句或者存储过程 ,返回参数datareader
+        /// <remarks >
+        /// 需要显示关闭连接
+        /// </remarks>
+        /// </summary>
+        /// <param name="transaction">事务</param>
+        /// <param name="commandType">ＳＱＬ语句类型</param>
+        /// <param name="commandText">ＳＱＬ语句或者存储过程名</param>
+        /// <param name="commandParameters">ＳＱＬ语句或者存储过程参数</param>
+        /// <returns>DataReader</returns>
+        public static SqlDataReader ExecuteReader(IDbTransaction transaction, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
         {
-            throw new NotImplementedException();
+            bool mustCloseConnection = false;
+            return ExecuteReader((SqlConnection)transaction.Connection, (SqlTransaction)transaction, commandType, commandText, mustCloseConnection, commandParameters, commandTimeout);
         }
 
-        public IEnumerable<T> ExecuteIEnumerable<T>(IDbConnection conn, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null) where T : class, new()
+        #endregion
+
+        #region ExecuteScalar
+
+
+        /// <summary>
+        /// 执行ＳＱＬ语句或者存储过程 ,返回参数object．第一行，第一列的值(通用)
+        /// </summary>
+        /// <param name="connection">要执行ＳＱＬ语句的连接</param>
+        /// <param name="commandType">ＳＱＬ语句类型</param>
+        /// <param name="commandText">ＳＱＬ语句或者存储过程名</param>
+        /// <param name="commandParameters">ＳＱＬ语句或者存储过程参数</param>
+        /// <returns>执行结果集第一行，第一列的值</returns>　
+        public static object ExecuteScalar(SqlConnection connection, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
         {
-            throw new NotImplementedException();
+            object retval = null;
+            SqlCommand cmd = new SqlCommand();
+            bool mustCloseConnection = false;
+            PrepareCommand(cmd, connection, (SqlTransaction)null, commandType, commandText, out mustCloseConnection, commandParameters, commandTimeout);
+            retval = cmd.ExecuteScalar();
+            cmd.Parameters.Clear();
+            if (mustCloseConnection)
+                connection.Close();
+            return retval;
         }
 
-        public IEnumerable<T> ExecuteIEnumerable<T>(IDbTransaction trans, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null) where T : class, new()
+
+
+        /// <summary>
+        ///  执行ＳＱＬ语句或者存储过程 ,返回参数object．第一行，第一列的值
+        /// </summary>
+        /// <param name="transaction">语句所在的事务</param>
+        /// <param name="commandType">ＳＱＬ语句类型</param>
+        /// <param name="commandText">ＳＱＬ语句或者存储过程名</param>
+        /// <param name="commandParameters">ＳＱＬ语句或者存储过程参数</param>
+        /// <returns>执行结果集第一行，第一列的值</returns>
+        public static object ExecuteScalar(IDbTransaction transaction, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
         {
-            throw new NotImplementedException();
+            object retval = null;
+            SqlCommand cmd = new SqlCommand();
+            bool mustCloseConnection = false;
+            PrepareCommand(cmd, ((SqlTransaction)transaction).Connection, (SqlTransaction)transaction, commandType, commandText, out mustCloseConnection, commandParameters, commandTimeout);
+            retval = cmd.ExecuteScalar();
+            cmd.Parameters.Clear();
+            return retval;
         }
 
-        public int ExecuteNonQuery(string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public int ExecuteNonQuery(string connKey, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public int ExecuteNonQuery(IDbConnection conn, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public int ExecuteNonQuery(IDbTransaction trans, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public IDataReader ExecuteReader(string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public IDataReader ExecuteReader(string connKey, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public IDataReader ExecuteReader(IDbConnection conn, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public IDataReader ExecuteReader(IDbTransaction trans, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public object ExecuteScalar(string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public T ExecuteScalar<T>(string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public object ExecuteScalar(string connKey, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public T ExecuteScalar<T>(string connKey, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public object ExecuteScalar(IDbConnection conn, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public T ExecuteScalar<T>(IDbConnection conn, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public object ExecuteScalar(IDbTransaction trans, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public T ExecuteScalar<T>(IDbTransaction trans, string commandText, List<IDataParameter> commandParameters = null, CommandType commandType = CommandType.Text, int? commandTimeout = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public string GetPagingSql(int pageIndex, int pageSize, string selectSql, string sqlCount, string orderBy)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void RollbackTractionand(IDbTransaction dbTransaction)
-        {
-            throw new NotImplementedException();
-        }
+        #endregion
     }
 }
