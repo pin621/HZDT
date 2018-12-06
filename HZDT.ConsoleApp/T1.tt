@@ -1,0 +1,25 @@
+﻿<#@ template debug="false" hostspecific="true" language="C#" #>
+<#@ output extension=".txt" #>
+<#@ assembly name="System.Core"#>
+<#@ assembly name="EnvDTE"#>
+<#@ import namespace="System.Collections.Generic"#>
+<#@ import namespace="System.IO"#>
+<#@ import namespace="System"#>
+<#@ import namespace="System.Text"#>
+<#@ import namespace="Microsoft.VisualStudio.TextTemplating"#>
+<#
+
+string solutionsPath = Host.ResolveAssemblyReference("$(SolutionDir)");
+string projectPath = Host.ResolveAssemblyReference("$(ProjectDir)");
+string targetPath = Host.ResolveAssemblyReference("$(TargetPath)");
+string targetDir = Host.ResolveAssemblyReference("$(TargetDir)");
+int top = 10;  
+for (int i = 0; i<=top; i++)   
+{ #>  
+   The square of <#= i #> is <#= i*i #>  
+<# } #>  
+<#=Path.GetDirectoryName(Host.TemplateFile)#>
+<#=solutionsPath#>
+<#=projectPath#>
+<#=targetPath#>
+<#=targetDir#>
