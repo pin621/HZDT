@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace HZDT.Domain.Model
+namespace HZDT.Domain.Model.BaseEntity
 {
     /// <summary>
     /// 用作泛型约束，表示继承自该接口的为领域实体

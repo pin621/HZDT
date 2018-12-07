@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace HZDT.Domain.Model
+namespace HZDT.Domain.Model.BaseEntity
 {
     /// <summary>
     /// 聚合根接口，用作泛型约束，

@@ -6,11 +6,21 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="T2.cs">
+    <None Include="T4\T2.cs">
       <DesignTime>True</DesignTime>
       <AutoGen>True</AutoGen>
       <DependentUpon>T2.tt</DependentUpon>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Data.SqlClient" Version="4.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Data.SqlClient">
+      <HintPath>C:\Program Files\dotnet\sdk\NuGetFallbackFolder\system.data.sqlclient\4.5.1\ref\netcoreapp2.1\System.Data.SqlClient.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>
@@ -18,39 +28,30 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Update="ModelTemplate.cs">
+    <Compile Update="T4\ModelTemplate.cs">
       <DesignTime>True</DesignTime>
       <AutoGen>True</AutoGen>
       <DependentUpon>ModelTemplate.tt</DependentUpon>
     </Compile>
-    <Compile Update="T2.cs">
+    <Compile Update="T4\T2.cs">
       <DesignTime>True</DesignTime>
       <AutoGen>True</AutoGen>
       <DependentUpon>T2.tt</DependentUpon>
     </Compile>
-    <Compile Update="T4.cs">
-      <DesignTime>True</DesignTime>
-      <AutoGen>True</AutoGen>
-      <DependentUpon>T4.tt</DependentUpon>
-    </Compile>
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="ModelTemplate.tt">
+    <None Update="T4\ModelTemplate.tt">
       <Generator>TextTemplatingFileGenerator</Generator>
       <LastGenOutput>ModelTemplate.cs</LastGenOutput>
     </None>
-    <None Update="T1.tt">
+    <None Update="T4\T1.tt">
       <Generator>TextTemplatingFileGenerator</Generator>
       <LastGenOutput>T1.txt</LastGenOutput>
     </None>
-    <None Update="T2.tt">
+    <None Update="T4\T2.tt">
       <Generator>TextTemplatingFileGenerator</Generator>
       <LastGenOutput>T2.cs</LastGenOutput>
-    </None>
-    <None Update="T4.tt">
-      <Generator>TextTemplatingFileGenerator</Generator>
-      <LastGenOutput>T4.cs</LastGenOutput>
     </None>
   </ItemGroup>
 

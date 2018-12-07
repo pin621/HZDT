@@ -6,13 +6,13 @@
 <#@ import namespace="System.Data.SqlClient" #>
 <#@ import namespace="System.Data" #>
 <#@ include file="ModelAuto.ttinclude"#>
-<# 
+<#  //实体类生成方法
 	//当前解决方路径
 	string solutionsPath = Host.ResolveAssemblyReference("$(SolutionDir)");
 	var manager = new Manager(Host, GenerationEnvironment, true) 
 	{ 
 		//文件输出路径
-		OutputPath = solutionsPath+"HZDT.Domain.Model\Entity"
+		OutputPath = solutionsPath+"HZDT.Domain.Model/Entity"
 	};
 #>
 <#
@@ -25,8 +25,7 @@
     string selectQuery = "select * from @tableName"; 
     SqlCommand command = new SqlCommand(selectQuery,conn); 
     SqlDataAdapter ad = new SqlDataAdapter(command); 
-    System.Data.DataSet ds = new DataSet();
- 
+    System.Data.DataSet ds = new DataSet(); 
     string propQuery = "SELECT 表名=sobj.name,字段名=scol.name,字段说明=sprop.[value] FROM syscolumns as scol inner join sys.sysobjects as sobj on scol.id=sobj.id and sobj.xtype='U' and sobj.name<>'dtproperties' left join sys.extended_properties as sprop on scol.id=sprop.major_id and scol.colid=sprop.minor_id where sobj.name='@tableName' and scol.name='@columnName'"; 
     SqlCommand command2 = new SqlCommand(propQuery,conn); 
     SqlDataAdapter ad2 = new SqlDataAdapter(command2); 
@@ -39,38 +38,40 @@
 		manager.StartBlock(row["TABLE_NAME"]+".cs");
 	 #>
 using System;
+using HZDT.Domain.Model.BaseEntity;
+
 namespace HZDT.Domain.Model
 {
     /// <summary>
     /// 数据表实体类：<#= row["TABLE_NAME"].ToString() #> 
     /// </summary>
     [Serializable()]
-    public class <#= row["TABLE_NAME"].ToString() #>
+    public class <#= row["TABLE_NAME"].ToString() #> : IEntity
     {    
 		<#
         ds.Tables.Clear();
         command.CommandText = selectQuery.Replace("@tableName",row["TABLE_NAME"].ToString()); 
         ad.FillSchema(ds, SchemaType.Mapped, row["TABLE_NAME"].ToString());
         foreach (DataColumn dc in ds.Tables[0].Columns)
-        { 
-        #>
+        { #>
         <# 
             ds2.Tables.Clear();
             command2.CommandText = propQuery.Replace("@tableName",row["TABLE_NAME"].ToString()); 
             command2.CommandText = command2.CommandText.Replace("@columnName",dc.ColumnName); 
             ad2.Fill(ds2);
-        #> 
+			string mark = string.Empty;
+            if (ds2.Tables[0].Rows.Count>0)
+            {
+                mark = ds2.Tables[0].Rows[0].ItemArray[2].ToString();
+            } #> 
 		/// <summary>
-		///
+		/// <#= dc.DataType.Name #>:<#=mark#>
 		/// </summary>                       
-		public <#= dc.DataType.Name #> <#= dc.ColumnName #> {get;set;}   
-        <# }  #>   
+		public <#= dc.DataType.Name #> <#= dc.ColumnName #> { get;set;}<# }  #>   
     }    
 }
 	<# manager.EndBlock(); #>
-
 <# } #>
 <#
     manager.Process(true);
-#>
-    
+#>    
